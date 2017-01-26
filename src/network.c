@@ -107,30 +107,6 @@ static void handle_error (enum rig_debug_level_e lvl, const char *msg)
 }
 
 /**
- * \brief Clears any data in the read buffer of the socket
- *
- * \param rp Port data structure
- */
-void network_flush(hamlib_port_t* rp)
-{
-  int len = 0;
-  char buffer[NET_BUFFER_SIZE] = { 0 };
-  for (;;) {
-#ifdef __MINGW32__
-    ioctlsocket (rp->fd, FIONREAD, &len);
-#else
-    ioctl(rp->fd, FIONREAD, &len);
-#endif
-    if (len > 0) {
-      len = read(rp->fd, &buffer, len < NET_BUFFER_SIZE ? len : NET_BUFFER_SIZE);
-      rig_debug(RIG_DEBUG_WARN, "Network data cleared: %s\n", buffer);
-    } else {
-      break;
-    }
-  }
-}
-
-/**
  * \brief Open network port using rig.state data
  *
  * Open Open network port using rig.state data.
@@ -251,6 +227,35 @@ int network_open(hamlib_port_t *rp, int default_port)
 
 	rp->fd = fd;
 	return RIG_OK;
+}
+
+/**
+ * \brief Clears any data in the read buffer of the socket
+ *
+ * \param rp Port data structure
+ */
+void network_flush(hamlib_port_t* rp)
+{
+#ifdef __MINGW32__
+  ULONG len = 0;
+#else
+  uint len = 0;
+#endif
+
+  char buffer[NET_BUFFER_SIZE] = { 0 };
+  for (;;) {
+#ifdef __MINGW32__
+    ioctlsocket (rp->fd, FIONREAD, &len);
+#else
+    ioctl(rp->fd, FIONREAD, &len);
+#endif
+    if (len > 0) {
+      len = read(rp->fd, &buffer, len < NET_BUFFER_SIZE ? len : NET_BUFFER_SIZE);
+      rig_debug(RIG_DEBUG_WARN, "Network data cleared: %s\n", buffer);
+    } else {
+      break;
+    }
+  }
 }
 
 int network_close(hamlib_port_t *rp)
