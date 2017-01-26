@@ -44,7 +44,6 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <signal.h>
-#include <sys/ioctl.h>
 
 
 #ifdef HAVE_NETINET_IN_H
@@ -58,6 +57,7 @@
 #endif
 #ifdef HAVE_SYS_SOCKET_H
 #include <sys/socket.h>
+#include <sys/ioctl.h>
 #elif HAVE_WS2TCPIP_H
 #include <ws2tcpip.h>
 #	if defined(HAVE_WSPIAPI_H)
