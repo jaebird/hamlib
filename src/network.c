@@ -116,7 +116,11 @@ void network_flush(hamlib_port_t* rp)
   int len = 0;
   char buffer[NET_BUFFER_SIZE] = { 0 };
   for (;;) {
+#ifdef __MINGW32__
+    ioctlsocket (rp->fd, FIONREAD, &len);
+#else
     ioctl(rp->fd, FIONREAD, &len);
+#endif
     if (len > 0) {
       len = read(rp->fd, &buffer, len < NET_BUFFER_SIZE ? len : NET_BUFFER_SIZE);
       rig_debug(RIG_DEBUG_WARN, "Network data cleared: %s\n", buffer);
