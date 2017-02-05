@@ -930,17 +930,22 @@ int pihpsdr_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 			val->f = lvl / 100.0;
 			break;
 
-
-		case RIG_LEVEL_AGC: /* FIX ME: ts2000 returns 0 -20 for AGC */
-			ret = get_kenwood_level(rig, "GT", &val->f);
-			agclevel = val->f;
-            rig_debug(RIG_DEBUG_ERR, "pihpsdr_get_level: ", "GT command: %d", agclevel);
-			if (agclevel == 0) val->i = RIG_AGC_OFF;
-			else if (agclevel < 6) val->i = RIG_AGC_SUPERFAST;
-			else if (agclevel < 11) val->i = RIG_AGC_FAST;
-			else if (agclevel < 16) val->i = RIG_AGC_MEDIUM;
-			else if (agclevel <= 20) val->i = RIG_AGC_SLOW;
-			return ret;
+		case RIG_LEVEL_AGC: /* pihpsdr defines the range 0 -20 for AGC (based on TS-2000) */
+			retval = kenwood_transaction (rig, "GT", lvlbuf, sizeof (lvlbuf));
+			if (retval != RIG_OK)
+				return retval;
+			lvl_len = strlen (lvlbuf);
+			if (lvl_len != 5) {
+				rig_debug(RIG_DEBUG_ERR,"pihpsdr_get_level: "
+					"unexpected answer len=%d\n", lvl_len);
+				return -RIG_ERJCTED;
+            }
+			sscanf(lvlbuf+2, "%d", &lvl);
+			if (lvl == 0) val->i = RIG_AGC_OFF; /*pihspdr: OFF */
+			else if (lvl < 6) val->i = RIG_AGC_SUPERFAST; /*pihspdr: 001-005 = FAST */
+			else if (lvl < 11) val->i = RIG_AGC_FAST; /*pihspdr: 006-010 = MEDIUM */
+			else if (lvl < 16) val->i = RIG_AGC_MEDIUM; /*pihspdr: 011-015 = SLOW */
+			else if (lvl <= 20) val->i = RIG_AGC_SLOW; /*pihspdr: 016-020 = LONG */
 			break;
 
 		case RIG_LEVEL_BKINDL:
