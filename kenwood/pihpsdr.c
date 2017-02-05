@@ -62,6 +62,7 @@
 /* prototypes */
 static int pihpsdr_open(RIG *rig);
 static int pihpsdr_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val);
+static int pihpsdr_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val);
 static int pihspdr_get_channel(RIG *rig, channel_t *chan);
 static int pihspdr_set_channel(RIG *rig, const channel_t *chan);
 
@@ -268,7 +269,7 @@ const struct rig_caps pihpsdr_caps = {
 .get_dcd =  kenwood_get_dcd,
 .set_func =  kenwood_set_func,
 .get_func =  kenwood_get_func,
-.set_level =  kenwood_set_level,
+.set_level =  pihpsdr_set_level,
 .get_level =  pihpsdr_get_level,
 .set_ant =  kenwood_set_ant,
 .get_ant =  kenwood_get_ant,
@@ -638,6 +639,115 @@ int pihspdr_set_channel(RIG *rig, const channel_t *chan)
 	return err;
 }
 
+int pihpsdr_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
+{
+  rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
+
+  if (!rig)
+    return -RIG_EINVAL;
+
+  char levelbuf[16];
+  int i, kenwood_val;
+
+  if (RIG_LEVEL_IS_FLOAT(level))
+    kenwood_val = val.f * 255;
+  else
+    kenwood_val = val.i;
+
+  switch (level) {
+  case RIG_LEVEL_RFPOWER:
+    /* XXX check level range */
+    sprintf(levelbuf, "PC%03d", kenwood_val);
+    break;
+
+  case RIG_LEVEL_AF:
+    sprintf(levelbuf, "AG%03d", kenwood_val);
+    break;
+
+  case RIG_LEVEL_RF:
+    /* XXX check level range */
+    sprintf(levelbuf, "RG%03d", kenwood_val);
+    break;
+
+  case RIG_LEVEL_SQL:
+    sprintf(levelbuf, "SQ%03d", kenwood_val);
+    break;
+
+  case RIG_LEVEL_AGC:
+	if (kenwood_val == RIG_AGC_OFF) kenwood_val = 0;
+	else if (kenwood_val == RIG_AGC_SUPERFAST) kenwood_val = 5;
+	else if (kenwood_val == RIG_AGC_FAST) kenwood_val = 10;
+	else if (kenwood_val == RIG_AGC_MEDIUM) kenwood_val = 15;
+	else if (kenwood_val == RIG_AGC_SLOW) kenwood_val =20;
+    sprintf(levelbuf, "GT%03d", kenwood_val);
+    break;
+
+  case RIG_LEVEL_ATT:
+    /* set the attenuator if a correct value is entered */
+    if (val.i == 0)
+      sprintf(levelbuf, "RA00");
+    else {
+      for (i=0; i<MAXDBLSTSIZ && rig->state.attenuator[i]; i++) {
+        if (val.i == rig->state.attenuator[i])
+        {
+          sprintf(levelbuf, "RA%02d", i+1);
+          break;
+        }
+      }
+      if (val.i != rig->state.attenuator[i])
+        return -RIG_EINVAL;
+    }
+    break;
+
+  case RIG_LEVEL_PREAMP:
+    /* set the preamp if a correct value is entered */
+    if (val.i == 0)
+      sprintf(levelbuf, "PA0");
+    else {
+      for (i=0; i<MAXDBLSTSIZ && rig->state.preamp[i]; i++) {
+        if (val.i == rig->state.preamp[i])
+        {
+          sprintf(levelbuf, "PA%01d", i+1);
+          break;
+        }
+      }
+      if (val.i != rig->state.preamp[i])
+        return -RIG_EINVAL;
+    }
+    break;
+
+  case RIG_LEVEL_SLOPE_HIGH:
+    if(val.i>20 || val.i < 0)
+      return -RIG_EINVAL;
+    sprintf(levelbuf, "SH%02d",(val.i));
+    break;
+
+  case RIG_LEVEL_SLOPE_LOW:
+    if(val.i>20 || val.i < 0)
+      return -RIG_EINVAL;
+    sprintf(levelbuf, "SL%02d",(val.i));
+    break;
+
+  case RIG_LEVEL_CWPITCH:
+    if(val.i > 1000 || val.i < 400)
+      return -RIG_EINVAL;
+    sprintf(levelbuf, "PT%02d", (val.i / 50) - 8);
+    break;
+
+  case RIG_LEVEL_KEYSPD:
+    if(val.i > 50 || val.i < 5)
+      return -RIG_EINVAL;
+    sprintf(levelbuf, "KS%03d", val.i);
+    break;
+
+  default:
+    rig_debug(RIG_DEBUG_ERR, "Unsupported set_level %d", level);
+    return -RIG_EINVAL;
+  }
+
+  return kenwood_transaction(rig, levelbuf, NULL, 0);
+}
+
 /*
  * pihpsdr_get_level
  * Assumes rig!=NULL, val!=NULL
@@ -823,11 +933,13 @@ int pihpsdr_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 
 		case RIG_LEVEL_AGC: /* FIX ME: ts2000 returns 0 -20 for AGC */
 			ret = get_kenwood_level(rig, "GT", &val->f);
-			agclevel = 255.0 * val->f;
-			if (agclevel == 0) val->i = 0;
-			else if (agclevel < 85) val->i = 1;
-			else if (agclevel < 170) val->i = 2;
-			else if (agclevel <= 255) val->i = 3;
+			agclevel = val->f;
+            rig_debug(RIG_DEBUG_ERR, "pihpsdr_get_level: ", "GT command: %d", agclevel);
+			if (agclevel == 0) val->i = RIG_AGC_OFF;
+			else if (agclevel < 6) val->i = RIG_AGC_SUPERFAST;
+			else if (agclevel < 11) val->i = RIG_AGC_FAST;
+			else if (agclevel < 16) val->i = RIG_AGC_MEDIUM;
+			else if (agclevel <= 20) val->i = RIG_AGC_SLOW;
 			return ret;
 			break;
 
