@@ -757,7 +757,7 @@ int pihpsdr_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 {
 		char lvlbuf[50];
 		size_t lvl_len;
-		int lvl, retval, ret, agclevel;
+		int lvl, retval;
 
 		lvl_len = 50;
 		switch (level) {
